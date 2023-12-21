@@ -146,7 +146,7 @@ internal class BannerManager(private val context: Context, private val bannerLis
     }
 
     @Suppress("UNNECESSARY_SAFE_CALL")
-    fun shouldSetConfig(callback: (Boolean) -> Unit) {
+    fun shouldSetConfig(callback: (Boolean) -> Unit) = CoroutineScope(Dispatchers.Main).launch {
         var actualCallback: ((Boolean) -> Unit)? = callback
         val workManager = AndBeyondMedia.getWorkManager(context)
         val workers = workManager.getWorkInfosForUniqueWork(ConfigSetWorker::class.java.simpleName).get()
@@ -402,7 +402,16 @@ internal class BannerManager(private val context: Context, private val bannerLis
                     isNetworkBlocked = true
                 }
             }
-            if (!isNetworkBlocked
+            var isRegionBlocked = false
+            if (sdkConfig?.countryStatus?.active == 1 &&
+                    (sdkConfig?.blockedRegions?.getCities()?.any { it.equals(countrySetup.third?.city, true) } == true ||
+                            (sdkConfig?.blockedRegions?.getStates()?.any { it.equals(countrySetup.third?.state, true) } == true) ||
+                            (sdkConfig?.blockedRegions?.getCountries()?.any { it.equals(countrySetup.third?.countryCode, true) } == true))
+            ) {
+                isRegionBlocked = true
+            }
+
+            if (!isNetworkBlocked && !isRegionBlocked
                     && !(!loadedAdapter?.adSourceId.isNullOrEmpty() && blockedTerms.contains(loadedAdapter?.adSourceId))
                     && !(!loadedAdapter?.adSourceName.isNullOrEmpty() && blockedTerms.contains(loadedAdapter?.adSourceName))
                     && !(!loadedAdapter?.adSourceInstanceId.isNullOrEmpty() && blockedTerms.contains(loadedAdapter?.adSourceInstanceId))
@@ -478,6 +487,8 @@ internal class BannerManager(private val context: Context, private val bannerLis
     }
 
     fun startUnfilledRefreshCounter() {
+        activeTimeCounter?.cancel()
+        passiveTimeCounter?.cancel()
         val time = sdkConfig?.unfilledTimerConfig?.time?.toLong() ?: 0L
         if (time <= 0) return
         unfilledRefreshCounter?.cancel()
@@ -490,8 +501,6 @@ internal class BannerManager(private val context: Context, private val bannerLis
                 refresh(0, true, fixedUnit = sdkConfig?.unfilledTimerConfig?.unit)
             }
         }
-        activeTimeCounter?.cancel()
-        passiveTimeCounter?.cancel()
         unfilledRefreshCounter?.start()
     }
 
@@ -584,6 +593,7 @@ internal class BannerManager(private val context: Context, private val bannerLis
         addCustomTargeting("hb_format", sdkConfig?.hbFormat ?: "amp")
         addCustomTargeting("visible", isForegroundRefresh.toString())
         addCustomTargeting("min_view", (if (bannerConfig.isVisibleFor > 10) 10 else bannerConfig.isVisibleFor).toString())
+        addCustomTargeting("sdk_version", BuildConfig.ADAPTER_VERSION)
         if (unfilled) addCustomTargeting("retry", "1")
         if (hijacked) addCustomTargeting("hijack", "1")
     }.build()
@@ -629,8 +639,25 @@ internal class BannerManager(private val context: Context, private val bannerLis
 
     fun checkGeoEdge(firstLook: Boolean, callback: () -> Unit) {
         val number = (1..100).random()
-        if ((firstLook && (number in 1..(bannerConfig.geoEdge?.firstLook ?: 0))) ||
-                (!firstLook && (number in 1..(bannerConfig.geoEdge?.other ?: 0)))) {
+        var firstLookPer = 0
+        var otherPer = 0
+        if (sdkConfig?.countryStatus?.active == 1 &&
+                (!sdkConfig?.geoEdge?.whitelistedRegions?.getCities().isNullOrEmpty()
+                        || !sdkConfig?.geoEdge?.whitelistedRegions?.getStates().isNullOrEmpty()
+                        || !sdkConfig?.geoEdge?.whitelistedRegions?.getCountries().isNullOrEmpty())
+        ) {
+            if (sdkConfig?.geoEdge?.whitelistedRegions?.getCities()?.any { it.equals(countrySetup.third?.city, true) } == true ||
+                    (sdkConfig?.geoEdge?.whitelistedRegions?.getStates()?.any { it.equals(countrySetup.third?.state, true) } == true) ||
+                    (sdkConfig?.geoEdge?.whitelistedRegions?.getCountries()?.any { it.equals(countrySetup.third?.countryCode, true) } == true)) {
+                firstLookPer = bannerConfig.geoEdge?.firstLook ?: 0
+                otherPer = bannerConfig.geoEdge?.other ?: 0
+            }
+        } else {
+            firstLookPer = bannerConfig.geoEdge?.firstLook ?: 0
+            otherPer = bannerConfig.geoEdge?.other ?: 0
+        }
+
+        if ((firstLook && (number in 1..firstLookPer)) || (!firstLook && (number in 1..otherPer))) {
             callback()
         }
     }
@@ -813,7 +840,7 @@ internal class BannerManager(private val context: Context, private val bannerLis
                         maxArea = (it.width * it.height)
                     }
                 }
-                biggestBanner = bannerConfig.fallback?.banners?.firstOrNull { it.height == "all" && it.width == "all" }?.apply {
+                biggestBanner = bannerConfig.fallback?.banners?.firstOrNull { it.height.equals("all", true) && it.width.equals("all", true) }?.apply {
                     height = biggestPubSize?.height.toString()
                     width = biggestPubSize?.width.toString()
                 }
@@ -857,7 +884,7 @@ internal class BannerManager(private val context: Context, private val bannerLis
         val urlBuilder = sdkConfig?.openRTb?.url?.toHttpUrlOrNull() ?: return
         val openRTB = sdkConfig?.openRTb!!
         val requestBody = prepareRequestBody(openRTB.request, adSize)
-        val loggingInterceptor = HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY)
+        val loggingInterceptor = HttpLoggingInterceptor().setLevel(if (AndBeyondMedia.specialTag.isNullOrEmpty()) HttpLoggingInterceptor.Level.NONE else HttpLoggingInterceptor.Level.BODY)
         val client: OkHttpClient = OkHttpClient.Builder().addInterceptor(loggingInterceptor)
                 .connectTimeout((openRTB.timeout ?: 1000).toLong(), TimeUnit.MILLISECONDS)
                 .writeTimeout((openRTB.timeout ?: 1000).toLong(), TimeUnit.MILLISECONDS)

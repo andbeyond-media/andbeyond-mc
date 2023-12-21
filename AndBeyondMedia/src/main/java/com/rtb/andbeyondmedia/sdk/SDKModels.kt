@@ -39,6 +39,8 @@ internal data class SDKConfig(
         val openWrapConfig: OpenWrapConfig? = null,
         @SerializedName("network_block")
         val networkBlock: String? = null,
+        @SerializedName("region_block")
+        val blockedRegions: Regions? = null,
         @SerializedName("diff")
         val difference: Int? = null,
         @SerializedName("network")
@@ -80,6 +82,25 @@ internal data class SDKConfig(
         @SerializedName("native_fallback")
         val nativeFallback: Int? = null
 ) {
+
+    @Keep
+    data class Regions(
+            private val cities: String? = null,
+            private val states: String? = null,
+            private val countries: String? = null
+    ) {
+        fun getCities(): List<String> {
+            return cities?.replace(" ", "")?.split(",")?.filter { it.isNotBlank() } ?: listOf()
+        }
+
+        fun getStates(): List<String> {
+            return states?.replace(" ", "")?.split(",")?.filter { it.isNotBlank() } ?: listOf()
+        }
+
+        fun getCountries(): List<String> {
+            return countries?.replace(" ", "")?.split(",")?.filter { it.isNotBlank() } ?: listOf()
+        }
+    }
 
     @Keep
     data class OpenWrapConfig(
@@ -229,7 +250,9 @@ internal data class SDKConfig(
             @SerializedName("creative_id")
             val creativeIds: String? = null,
             @SerializedName("reasons")
-            val reasons: String? = null
+            val reasons: String? = null,
+            @SerializedName("whitelist")
+            val whitelistedRegions: Regions? = null
     )
 
     @Keep
@@ -424,4 +447,8 @@ data class CountryModel(
         val latitude: Double? = null,
         @SerializedName("longitude", alternate = ["lon"])
         val longitude: Double? = null,
+        @SerializedName("city")
+        val city: String? = null,
+        @SerializedName("regionCode", alternate = ["state"])
+        val state: String? = null
 )
