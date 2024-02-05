@@ -13,7 +13,7 @@ android {
         targetSdk 33
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
-        buildConfigField("String", "ADAPTER_VERSION", "\"1.0.7\"")
+        buildConfigField("String", "ADAPTER_VERSION", "\"1.0.8\"")
     }
 
     buildTypes {
@@ -50,6 +50,7 @@ dependencies {
     implementation "com.squareup.okhttp3:logging-interceptor:$okhttp"
     implementation "com.squareup.retrofit2:converter-gson:$retrofit"
     implementation "com.squareup.retrofit2:retrofit:$retrofit"
+    implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
     implementation 'org.prebid:prebid-mobile-sdk:2.1.8'
     implementation 'com.github.appharbr:appharbr-android-sdk:2.13.3'
     implementation 'com.github.bumptech.glide:glide:4.16.0'
@@ -73,7 +74,7 @@ publishing {
         release(MavenPublication) {
             groupId = 'com.github.andbeyond-media'
             artifactId = 'andbeyond-mc'
-            version = '1.0.7'
+            version = '1.0.8'
 
             afterEvaluate {
                 from components.release
