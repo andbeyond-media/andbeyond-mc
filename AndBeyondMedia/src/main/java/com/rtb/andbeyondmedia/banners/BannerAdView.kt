@@ -39,7 +39,8 @@ import com.pubmatic.sdk.openwrap.banner.POBBannerView
 import com.pubmatic.sdk.openwrap.banner.POBBannerView.POBBannerViewListener
 import com.pubmatic.sdk.openwrap.eventhandler.dfp.DFPBannerEventHandler
 import com.pubmatic.sdk.openwrap.eventhandler.dfp.DFPBannerEventHandler.DFPConfigListener
-import com.pubmatic.sdk.openwrap.eventhandler.dfp.GAMNativeEventHandler
+import com.pubmatic.sdk.openwrap.eventhandler.dfp.GAMConfigListener
+import com.pubmatic.sdk.openwrap.eventhandler.dfp.GAMNativeBannerEventHandler
 import com.rtb.andbeyondmedia.R
 import com.rtb.andbeyondmedia.common.AdRequest
 import com.rtb.andbeyondmedia.common.AdTypes
@@ -452,7 +453,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
         return true
     }
 
-    fun loadWithOW(pubID: String, profile: Int, owAdUnitId: String, configListener: GAMNativeEventHandler.GAMConfigListener? = null, nativeAdListener: GAMNativeEventHandler.NativeAdListener? = null): Boolean {
+    fun loadWithOW(pubID: String, profile: Int, owAdUnitId: String, configListener: GAMConfigListener? = null, nativeAdListener: GAMNativeBannerEventHandler.NativeAdListener? = null): Boolean {
         if (!this::currentAdUnit.isInitialized) return false
         if (this::adView.isInitialized) adView.destroy()
         if (this::pobBanner.isInitialized) pobBanner.destroy()
@@ -465,9 +466,9 @@ class BannerAdView : LinearLayout, BannerManagerListener {
             }
         }
 
-        val eventHandler = GAMNativeEventHandler(mContext, currentAdUnit, *currentAdSizes.toTypedArray())
+        val eventHandler = GAMNativeBannerEventHandler(mContext, currentAdUnit, *currentAdSizes.toTypedArray())
         configListener?.let { eventHandler.setConfigListener(configListener) }
-        eventHandler.configureNativeAd(object : GAMNativeEventHandler.NativeAdListener() {
+        eventHandler.configureNativeAd(object : GAMNativeBannerEventHandler.NativeAdListener() {
             override fun onAdReceived(nativeAd: NativeAd) {
                 nativeAdListener?.onAdReceived(nativeAd)
                 onNativeAdReceived()

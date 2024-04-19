@@ -2,18 +2,18 @@ plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
     id 'maven-publish'
-    id "io.sentry.android.gradle" version "3.12.0"
+    id "io.sentry.android.gradle" version "4.4.0"
 }
 
 android {
-    compileSdk 33
+    compileSdk 34
 
     defaultConfig {
         minSdk 21
-        targetSdk 33
+        targetSdk 34
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
-        buildConfigField("String", "ADAPTER_VERSION", "\"1.1.4\"")
+        buildConfigField("String", "ADAPTER_VERSION", "\"1.5.0\"")
     }
 
     buildTypes {
@@ -23,21 +23,22 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
     buildFeatures{
         viewBinding true
+        buildConfig true
     }
     namespace 'com.rtb.andbeyondmedia'
 }
 
 ext {
-    retrofit = "2.9.0"
-    okhttp = '5.0.0-alpha.11'
+    retrofit = "2.11.0"
+    okhttp = '5.0.0-alpha.12'
 }
 
 dependencies {
@@ -45,24 +46,24 @@ dependencies {
     //noinspection GradleDependency
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation "androidx.appcompat:appcompat:1.6.1"
-    implementation "com.google.android.gms:play-services-ads:22.6.0"
+    implementation "com.google.android.gms:play-services-ads:23.0.0"
     implementation "com.squareup.okhttp3:okhttp:$okhttp"
     implementation "com.squareup.okhttp3:logging-interceptor:$okhttp"
     implementation "com.squareup.retrofit2:converter-gson:$retrofit"
     implementation "com.squareup.retrofit2:retrofit:$retrofit"
-    implementation 'androidx.lifecycle:lifecycle-extensions:2.0.0'
+    implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
     implementation 'org.prebid:prebid-mobile-sdk:2.1.8'
     implementation 'com.github.appharbr:appharbr-android-sdk:2.13.3'
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     //noinspection GradleDependency
-    implementation 'androidx.work:work-runtime-ktx:2.8.1'
-    implementation 'io.sentry:sentry-android:6.23.0'
+    implementation 'androidx.work:work-runtime-ktx:2.9.0'
+    implementation 'io.sentry:sentry-android:7.8.0'
     implementation 'com.amazon.android:aps-sdk:9.8.4'
     // To integrate OpenWrap SDK
-    implementation 'com.pubmatic.sdk:openwrap:2.5.0'
+    implementation 'com.pubmatic.sdk:openwrap:3.4.0'
 
     // To integrate GAM event handler
-    implementation 'com.pubmatic.sdk:openwrap-eventhandler-dfp:2.7.0'
+    implementation 'com.pubmatic.sdk:openwrap-eventhandler-dfp:3.0.0'
 
     // To fetch the Android Advertising Id in OW SDK
     implementation 'com.google.android.gms:play-services-ads-identifier:18.0.1'
@@ -74,7 +75,7 @@ publishing {
         release(MavenPublication) {
             groupId = 'com.github.andbeyond-media'
             artifactId = 'andbeyond-mc'
-            version = '1.1.4'
+            version = '1.5.0'
 
             afterEvaluate {
                 from components.release
