@@ -13,7 +13,7 @@ android {
         targetSdk 34
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
-        buildConfigField("String", "ADAPTER_VERSION", "\"1.5.3\"")
+        buildConfigField("String", "ADAPTER_VERSION", "\"1.5.4\"")
     }
 
     buildTypes {
@@ -29,7 +29,7 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
-    buildFeatures{
+    buildFeatures {
         viewBinding true
         buildConfig true
     }
@@ -46,7 +46,7 @@ dependencies {
     //noinspection GradleDependency
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation "androidx.appcompat:appcompat:1.6.1"
-    implementation "com.google.android.gms:play-services-ads:23.0.0"
+    implementation "com.google.android.gms:play-services-ads:23.2.0"
     implementation "com.squareup.okhttp3:okhttp:$okhttp"
     implementation "com.squareup.okhttp3:logging-interceptor:$okhttp"
     implementation "com.squareup.retrofit2:converter-gson:$retrofit"
@@ -60,13 +60,13 @@ dependencies {
     implementation 'io.sentry:sentry-android:7.8.0'
     implementation 'com.amazon.android:aps-sdk:9.8.4'
     // To integrate OpenWrap SDK
-    implementation 'com.pubmatic.sdk:openwrap:3.4.0'
+    implementation 'com.pubmatic.sdk:openwrap:3.7.0'
 
     // To integrate GAM event handler
-    implementation 'com.pubmatic.sdk:openwrap-eventhandler-dfp:3.0.0'
+    implementation 'com.pubmatic.sdk:openwrap-eventhandler-dfp:4.0.0'
 
     // To fetch the Android Advertising Id in OW SDK
-    implementation 'com.google.android.gms:play-services-ads-identifier:18.0.1'
+    implementation 'com.google.android.gms:play-services-ads-identifier:18.1.0'
 
 }
 
@@ -75,7 +75,7 @@ publishing {
         release(MavenPublication) {
             groupId = 'com.github.andbeyond-media'
             artifactId = 'andbeyond-mc'
-            version = '1.5.3'
+            version = '1.5.4'
 
             afterEvaluate {
                 from components.release
