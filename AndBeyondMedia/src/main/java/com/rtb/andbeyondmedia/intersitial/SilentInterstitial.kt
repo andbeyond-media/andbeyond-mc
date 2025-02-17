@@ -23,6 +23,7 @@ import com.rtb.andbeyondmedia.rewardedinterstitial.RewardedInterstitialAd
 import com.rtb.andbeyondmedia.sdk.ABMError
 import com.rtb.andbeyondmedia.sdk.AndBeyondMedia
 import com.rtb.andbeyondmedia.sdk.BannerAdListener
+import com.rtb.andbeyondmedia.sdk.ConfigProvider
 import com.rtb.andbeyondmedia.sdk.StoreService
 import com.rtb.andbeyondmedia.sdk.log
 import java.util.Date
@@ -41,10 +42,17 @@ internal class SilentInterstitial {
     private val tag: String
         get() = this.javaClass.simpleName
 
+    @Suppress("SENSELESS_COMPARISON")
     fun registerActivity(activity: Activity) {
-        if (activities.none { it.localClassName == activity.localClassName }) {
-            tag.log { activity.localClassName }
-            activities.add(activity)
+        try {
+            if (activities.isEmpty() || started) {
+                activities = activities.filter { it != null && !it.isDestroyed && !it.isFinishing } as ArrayList<Activity>
+                if (activities.none { it.localClassName == activity.localClassName }) {
+                    tag.log { activity.localClassName }
+                    activities.add(activity)
+                }
+            }
+        } catch (_: Throwable) {
         }
     }
 
@@ -52,15 +60,16 @@ internal class SilentInterstitial {
         if (started) return
         tag.log { String.format("%s:%s- Version:%s", "setConfig", "entry", BuildConfig.ADAPTER_VERSION) }
         storeService = AndBeyondMedia.getStoreService(context)
-        val sdkConfig = storeService?.config
-        val shouldBeActive = !(sdkConfig == null || sdkConfig.switch != 1)
-        if (!shouldBeActive) return
-        interstitialConfig = sdkConfig?.silentInterstitialConfig ?: SilentInterstitialConfig()
-        ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifeCycleHandler())
-        started = true
-        timerSeconds = interstitialConfig.timer ?: 0
-        tag.log { "setConfig :$interstitialConfig" }
-        resumeCounter()
+        ConfigProvider.getConfig(context).let { sdkConfig ->
+            val shouldBeActive = !(sdkConfig == null || sdkConfig.switch != 1)
+            if (!shouldBeActive) return@let
+            interstitialConfig = sdkConfig?.silentInterstitialConfig ?: SilentInterstitialConfig()
+            ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifeCycleHandler())
+            started = true
+            timerSeconds = interstitialConfig.timer ?: 0
+            tag.log { "setConfig :$interstitialConfig" }
+            resumeCounter()
+        }
     }
 
     fun destroy() {
@@ -166,7 +175,7 @@ internal class SilentInterstitial {
         resumeCounter()
     }
 
-    private fun findContext(): Activity? {
+    internal fun findContext(): Activity? {
         if (activities.isEmpty()) return null
         return try {
             activities = activities.filter { !it.isDestroyed && !it.isFinishing } as ArrayList<Activity>

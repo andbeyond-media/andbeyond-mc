@@ -3,8 +3,6 @@ package com.rtb.andbeyondmedia.nativeformat
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import androidx.lifecycle.Observer
-import androidx.work.WorkInfo
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.LoadAdError
@@ -23,7 +21,8 @@ import com.rtb.andbeyondmedia.common.AdRequest
 import com.rtb.andbeyondmedia.common.AdTypes
 import com.rtb.andbeyondmedia.intersitial.InterstitialConfig
 import com.rtb.andbeyondmedia.sdk.AndBeyondMedia
-import com.rtb.andbeyondmedia.sdk.ConfigSetWorker
+import com.rtb.andbeyondmedia.sdk.ConfigFetch
+import com.rtb.andbeyondmedia.sdk.ConfigProvider
 import com.rtb.andbeyondmedia.sdk.SDKConfig
 import com.rtb.andbeyondmedia.sdk.log
 import kotlinx.coroutines.CoroutineScope
@@ -41,7 +40,6 @@ class NativeAdManager(private val context: Context, private val adUnit: String) 
     private var sdkConfig: SDKConfig? = null
     private var nativeConfig: InterstitialConfig = InterstitialConfig()
     private var shouldBeActive: Boolean = false
-    private val storeService = AndBeyondMedia.getStoreService(context)
     private var firstLook: Boolean = true
     private var overridingUnit: String? = null
     private var otherUnit = false
@@ -54,7 +52,8 @@ class NativeAdManager(private val context: Context, private val adUnit: String) 
     var owTestMode: Boolean? = null
 
     init {
-        sdkConfig = storeService.config
+        AndBeyondMedia.registerActivity(context)
+        sdkConfig = ConfigProvider.getConfig(context)
         shouldBeActive = !(sdkConfig == null || sdkConfig?.switch != 1)
     }
 
@@ -301,25 +300,11 @@ class NativeAdManager(private val context: Context, private val adUnit: String) 
 
     @Suppress("UNNECESSARY_SAFE_CALL")
     private fun shouldSetConfig(callback: (Boolean) -> Unit) = CoroutineScope(Dispatchers.Main).launch {
-        val workManager = AndBeyondMedia.getWorkManager(context)
-        val workers = workManager.getWorkInfosForUniqueWork(ConfigSetWorker::class.java.simpleName).get()
-        if (workers.isNullOrEmpty()) {
-            callback(false)
-        } else {
-            try {
-                val workerData = workManager.getWorkInfoByIdLiveData(workers[0].id)
-                workerData?.observeForever(object : Observer<WorkInfo?> {
-                    override fun onChanged(value: WorkInfo?) {
-                        if (value?.state != WorkInfo.State.RUNNING && value?.state != WorkInfo.State.ENQUEUED) {
-                            workerData.removeObserver(this)
-                            sdkConfig = storeService.config
-                            shouldBeActive = !(sdkConfig == null || sdkConfig?.switch != 1)
-                            callback(shouldBeActive)
-                        }
-                    }
-                })
-            } catch (e: Throwable) {
-                callback(false)
+        ConfigProvider.configStatus.collect {
+            if (it is ConfigFetch.Completed) {
+                sdkConfig = it.config
+                shouldBeActive = !(sdkConfig == null || sdkConfig?.switch != 1)
+                callback(shouldBeActive)
             }
         }
     }
@@ -351,8 +336,7 @@ class NativeAdManager(private val context: Context, private val adUnit: String) 
     }
 
     private fun getAdUnitName(unfilled: Boolean, hijacked: Boolean, newUnit: Boolean): String {
-        return overridingUnit ?: String.format(Locale.ENGLISH, "%s-%d", nativeConfig.customUnitName,
-                if (unfilled) nativeConfig.unFilled?.number else if (newUnit) nativeConfig.newUnit?.number else if (hijacked) nativeConfig.hijack?.number else nativeConfig.position)
+        return overridingUnit ?: String.format(Locale.ENGLISH, "%s-%d", nativeConfig.customUnitName, if (unfilled) nativeConfig.unFilled?.number else if (newUnit) nativeConfig.newUnit?.number else if (hijacked) nativeConfig.hijack?.number else nativeConfig.position)
     }
 
     private fun createRequest(unfilled: Boolean = false, hijacked: Boolean = false) = AdRequest().Builder().apply {
@@ -361,7 +345,6 @@ class NativeAdManager(private val context: Context, private val adUnit: String) 
         if (unfilled) addCustomTargeting("retry", "1")
         if (hijacked) addCustomTargeting("hijack", "1")
     }.build()
-
 
     private fun fetchDemand(adRequest: AdManagerAdRequest, callback: () -> Unit) {
         if (sdkConfig?.prebid?.whitelistedFormats != null && sdkConfig?.prebid?.whitelistedFormats?.contains(AdTypes.NATIVE) == false) {

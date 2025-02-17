@@ -3,8 +3,6 @@ package com.rtb.andbeyondmedia.rewarded
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
-import androidx.lifecycle.Observer
-import androidx.work.WorkInfo
 import com.appharbr.sdk.engine.AdBlockReason
 import com.appharbr.sdk.engine.AdSdk
 import com.appharbr.sdk.engine.AppHarbr
@@ -20,26 +18,28 @@ import com.rtb.andbeyondmedia.common.AdRequest
 import com.rtb.andbeyondmedia.common.AdTypes
 import com.rtb.andbeyondmedia.intersitial.InterstitialConfig
 import com.rtb.andbeyondmedia.sdk.AndBeyondMedia
-import com.rtb.andbeyondmedia.sdk.ConfigSetWorker
+import com.rtb.andbeyondmedia.sdk.ConfigFetch
+import com.rtb.andbeyondmedia.sdk.ConfigProvider
 import com.rtb.andbeyondmedia.sdk.SDKConfig
 import com.rtb.andbeyondmedia.sdk.log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.prebid.mobile.RewardedVideoAdUnit
+import java.util.Locale
 
 internal class RewardedAdManager(private val context: Activity, private val adUnit: String) {
 
     private var sdkConfig: SDKConfig? = null
     private var config: InterstitialConfig = InterstitialConfig()
     private var shouldBeActive: Boolean = false
-    private val storeService = AndBeyondMedia.getStoreService(context)
     private var firstLook: Boolean = true
     private var overridingUnit: String? = null
     private var otherUnit = false
 
     init {
-        sdkConfig = storeService.config
+        AndBeyondMedia.registerActivity(context)
+        sdkConfig = ConfigProvider.getConfig(context)
         shouldBeActive = !(sdkConfig == null || sdkConfig?.switch != 1)
     }
 
@@ -171,25 +171,11 @@ internal class RewardedAdManager(private val context: Activity, private val adUn
 
     @Suppress("UNNECESSARY_SAFE_CALL")
     private fun shouldSetConfig(callback: (Boolean) -> Unit) = CoroutineScope(Dispatchers.Main).launch {
-        val workManager = AndBeyondMedia.getWorkManager(context)
-        val workers = workManager.getWorkInfosForUniqueWork(ConfigSetWorker::class.java.simpleName).get()
-        if (workers.isNullOrEmpty()) {
-            callback(false)
-        } else {
-            try {
-                val workerData = workManager.getWorkInfoByIdLiveData(workers[0].id)
-                workerData?.observeForever(object : Observer<WorkInfo?> {
-                    override fun onChanged(value: WorkInfo?) {
-                        if (value?.state != WorkInfo.State.RUNNING && value?.state != WorkInfo.State.ENQUEUED) {
-                            workerData.removeObserver(this)
-                            sdkConfig = storeService.config
-                            shouldBeActive = !(sdkConfig == null || sdkConfig?.switch != 1)
-                            callback(shouldBeActive)
-                        }
-                    }
-                })
-            } catch (e: Throwable) {
-                callback(false)
+        ConfigProvider.configStatus.collect {
+            if (it is ConfigFetch.Completed) {
+                sdkConfig = it.config
+                shouldBeActive = !(sdkConfig == null || sdkConfig?.switch != 1)
+                callback(shouldBeActive)
             }
         }
     }
@@ -221,7 +207,7 @@ internal class RewardedAdManager(private val context: Activity, private val adUn
     }
 
     private fun getAdUnitName(unfilled: Boolean, hijacked: Boolean, newUnit: Boolean): String {
-        return overridingUnit ?: String.format("%s-%d", config.customUnitName, if (unfilled) config.unFilled?.number else if (newUnit) config.newUnit?.number else if (hijacked) config.hijack?.number else config.position)
+        return overridingUnit ?: String.format(Locale.ENGLISH, "%s-%d", config.customUnitName, if (unfilled) config.unFilled?.number else if (newUnit) config.newUnit?.number else if (hijacked) config.hijack?.number else config.position)
     }
 
     private fun createRequest(unfilled: Boolean = false, hijacked: Boolean = false) = AdRequest().Builder().apply {

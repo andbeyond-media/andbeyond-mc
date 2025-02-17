@@ -1,4 +1,4 @@
-package com.rtb.andbeyondmedia.banners
+package com.rtb.andbeyondmedia.admob
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -12,6 +12,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.LinearLayout.LayoutParams
 import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.allViews
@@ -30,8 +31,8 @@ import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.VideoOptions
 import com.google.android.gms.ads.admanager.AdManagerAdRequest
 import com.google.android.gms.ads.admanager.AdManagerAdView
 import com.google.android.gms.ads.nativead.NativeAd
@@ -44,42 +45,41 @@ import com.pubmatic.sdk.openwrap.eventhandler.dfp.DFPBannerEventHandler.DFPConfi
 import com.pubmatic.sdk.openwrap.eventhandler.dfp.GAMConfigListener
 import com.pubmatic.sdk.openwrap.eventhandler.dfp.GAMNativeBannerEventHandler
 import com.rtb.andbeyondmedia.R
+import com.rtb.andbeyondmedia.banners.BannerAdSize
 import com.rtb.andbeyondmedia.common.AdRequest
 import com.rtb.andbeyondmedia.common.AdTypes
 import com.rtb.andbeyondmedia.common.dpToPx
 import com.rtb.andbeyondmedia.databinding.BannerAdViewBinding
 import com.rtb.andbeyondmedia.sdk.ABMError
+import com.rtb.andbeyondmedia.sdk.AdMobBannerListener
 import com.rtb.andbeyondmedia.sdk.AndBeyondError
 import com.rtb.andbeyondmedia.sdk.AndBeyondMedia
-import com.rtb.andbeyondmedia.sdk.BannerAdListener
 import com.rtb.andbeyondmedia.sdk.BannerManagerListener
 import com.rtb.andbeyondmedia.sdk.Fallback
-import com.rtb.andbeyondmedia.sdk.SDKConfig
 import com.rtb.andbeyondmedia.sdk.log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.prebid.mobile.addendum.AdViewUtils
 import org.prebid.mobile.addendum.PbFindSizeError
-import java.util.Locale
-import kotlin.collections.ArrayList
 
-class BannerAdView : LinearLayout, BannerManagerListener {
+class AdMobBannerAdView : LinearLayout, BannerManagerListener {
 
     private lateinit var mContext: Context
     private lateinit var binding: BannerAdViewBinding
     private lateinit var adView: AdManagerAdView
+    private lateinit var adMobView: AdView
     private var loadedAdView: AdManagerAdView? = null
+    private var loadedAdMobView: AdView? = null
     private var loadedOWView: POBBannerView? = null
     private lateinit var pobBanner: POBBannerView
-    private lateinit var bannerManager: BannerManager
+    private lateinit var bannerManager: AdMobBannerManager
     private var adType: String = AdTypes.BANNER
     private var section: String = "App"
     private lateinit var currentAdUnit: String
     private lateinit var currentAdSizes: List<AdSize>
-    private var videoOptions: VideoOptions? = null
     private var firstLook = true
-    private var bannerAdListener: BannerAdListener? = null
+    private var bannerAdListener: AdMobBannerListener? = null
     private lateinit var viewState: Lifecycle.Event
     private var isRefreshLoaded = false
     private var owBidSummary: Boolean? = null
@@ -109,30 +109,25 @@ class BannerAdView : LinearLayout, BannerManagerListener {
         this.firstLook = true
         attachLifecycle(mContext)
         bannerManager = try {
-            BannerManager(context, this, this.apply {
+            AdMobBannerManager(context, this, this.apply {
                 if (this.id == -1) {
                     this.id = (0..Int.MAX_VALUE).random()
                 }
             })
         } catch (e: Throwable) {
-            BannerManager(context, this, null)
+            AdMobBannerManager(context, this, null)
         }
 
         val view = inflate(context, R.layout.banner_ad_view, this)
         binding = BannerAdViewBinding.bind(view)
         attrs?.let {
-            context.obtainStyledAttributes(it, R.styleable.BannerAdView).apply {
-                val adUnitId = getString(R.styleable.BannerAdView_adUnitId) ?: ""
-                val adSize = getString(R.styleable.BannerAdView_adSize)
-                var adSizes = getString(R.styleable.BannerAdView_adSizes) ?: "BANNER"
-                adType = getString(R.styleable.BannerAdView_adType) ?: AdTypes.BANNER
-                section = getString(R.styleable.BannerAdView_section) ?: "App"
-                if (adSize != null && !adSizes.contains(adSize)) {
-                    adSizes = if (adSizes.isEmpty()) adSize
-                    else String.format(Locale.ENGLISH, "%s,%s", adSizes, adSize)
-                }
-                if (adUnitId.isNotEmpty() && adSizes.isNotEmpty()) {
-                    attachAdView(adUnitId, bannerManager.convertStringSizesToAdSizes(adSizes), true)
+            context.obtainStyledAttributes(it, R.styleable.AdMobBannerAdView).apply {
+                val adUnitId = getString(R.styleable.AdMobBannerAdView_adUnitId) ?: ""
+                val adSize = getString(R.styleable.AdMobBannerAdView_adSize) ?: "BANNER"
+                adType = getString(R.styleable.AdMobBannerAdView_adType) ?: AdTypes.BANNER
+                section = getString(R.styleable.AdMobBannerAdView_section) ?: "App"
+                if (adUnitId.isNotEmpty() && adSize.isNotEmpty()) {
+                    attachAdMobView(adUnitId, bannerManager.convertStringSizesToAdSizes(adSize), true)
                 }
             }.also { info ->
                 info.recycle()
@@ -142,6 +137,53 @@ class BannerAdView : LinearLayout, BannerManagerListener {
 
     internal fun makeInter() {
         bannerManager.isInter = true
+    }
+
+    fun attachAdMobView(adUnitId: String, adSizes: List<AdSize>, attach: Boolean) {
+        adMobView = AdView(mContext)
+        adMobView.layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
+        if (adSizes.none { it == AdSize.FLUID }) {
+            currentAdSizes = adSizes
+        }
+        currentAdUnit = adUnitId
+        try {
+            when (adSizes.size) {
+                0 -> adMobView.setAdSize(AdSize.BANNER)
+                else -> adMobView.setAdSize(adSizes.first())
+            }
+        } catch (_: Throwable) {
+            adMobView.setAdSize(AdSize.BANNER)
+        }
+        adMobView.adUnitId = adUnitId
+        adMobView.adListener = adListener
+        if (bannerManager.isSeemLessRefreshActive()) {
+            if (attach) {
+                try {
+                    loadedAdView?.destroy()
+                    loadedAdMobView?.destroy()
+                    loadedOWView?.destroy()
+                    binding.root.removeAllViews()
+                    binding.root.addView(adMobView)
+                } catch (_: Throwable) {
+                }
+                pendingAttach = false
+                log { "attachAdView : $currentAdUnit" }
+            } else {
+                pendingAttach = true
+                log { "Pending attachAdView : $adUnitId" }
+            }
+        } else {
+            try {
+                loadedAdView?.destroy()
+                loadedOWView?.destroy()
+                loadedAdMobView?.destroy()
+                binding.root.removeAllViews()
+                binding.root.addView(adMobView)
+            } catch (_: Throwable) {
+            }
+            pendingAttach = false
+            log { "attachAdView : $currentAdUnit" }
+        }
     }
 
     override fun attachAdView(adUnitId: String, adSizes: List<AdSize>, attach: Boolean) {
@@ -167,6 +209,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
         } else {
             if (this::adView.isInitialized) adView.destroy()
             if (this::pobBanner.isInitialized) pobBanner.destroy()
+            if (this::adMobView.isInitialized) adMobView.destroy()
         }
         adView = AdManagerAdView(mContext)
         adView.layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
@@ -185,7 +228,6 @@ class BannerAdView : LinearLayout, BannerManagerListener {
         }
         adView.adUnitId = adUnitId
         adView.adListener = adListener
-        videoOptions?.let { adView.setVideoOptions(it) }
         if (bannerManager.isSeemLessRefreshActive()) {
             if (attach) {
                 attachView()
@@ -201,6 +243,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
     private fun attachView() {
         try {
             loadedAdView?.destroy()
+            loadedAdMobView?.destroy()
             loadedOWView?.destroy()
             binding.root.removeAllViews()
             binding.root.addView(adView)
@@ -266,7 +309,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
             log { "Fallback for $currentAdUnit Failed with error : $error" }
             bannerManager.startUnfilledRefreshCounter()
             if (bannerManager.allowCallback(isRefreshLoaded)) {
-                bannerAdListener?.onAdFailedToLoad(this@BannerAdView, ABMError(10, "No Fill"), false)
+                bannerAdListener?.onAdFailedToLoad(this@AdMobBannerAdView, ABMError(10, "No Fill"), false)
             }
         }
         try {
@@ -325,7 +368,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
                 log { "Fallback for $currentAdUnit Failed with error : $error" }
                 bannerManager.startUnfilledRefreshCounter()
                 if (bannerManager.allowCallback(isRefreshLoaded)) {
-                    bannerAdListener?.onAdFailedToLoad(this@BannerAdView, ABMError(10, "No Fill"), false)
+                    bannerAdListener?.onAdFailedToLoad(this@AdMobBannerAdView, ABMError(10, "No Fill"), false)
                 }
             } catch (_: Throwable) {
             }
@@ -334,7 +377,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
         try {
             log { "Attach fallback image for : $currentAdUnit" }
             Glide.with(ad).load(fallbackBanner.image).listener(object : RequestListener<Drawable> {
-                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
+                override fun onLoadFailed(e: GlideException?, model: Any?, target: com.bumptech.glide.request.target.Target<Drawable>, isFirstResource: Boolean): Boolean {
                     sendFailure(e?.message ?: "")
                     return false
                 }
@@ -371,54 +414,36 @@ class BannerAdView : LinearLayout, BannerManagerListener {
 
     fun setAdSize(adSize: BannerAdSize) = setAdSizes(adSize)
 
-    fun setAdSizes(vararg adSizes: BannerAdSize) {
+    private fun setAdSizes(vararg adSizes: BannerAdSize) {
         this.currentAdSizes = bannerManager.convertVaragsToAdSizes(*adSizes)
         if (this::currentAdSizes.isInitialized && this::currentAdUnit.isInitialized) {
-            attachAdView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
+            attachAdMobView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
         }
     }
 
     fun setAdUnitID(adUnitId: String) {
         this.currentAdUnit = adUnitId
         if (this::currentAdSizes.isInitialized && this::currentAdUnit.isInitialized) {
-            attachAdView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
+            attachAdMobView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
         }
     }
 
     fun setAdType(adType: String) {
         this.adType = adType
         if (this::currentAdSizes.isInitialized && this::currentAdUnit.isInitialized) {
-            attachAdView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
+            attachAdMobView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
         }
-    }
-
-    internal fun setAdView(sdkConfig: SDKConfig?, adView: AdManagerAdView, adSizes: List<AdSize>, adUnitId: String): AdListener {
-        bannerManager.setSudoConfig(sdkConfig)
-        bannerManager.setConfig(adUnitId, adSizes as ArrayList<AdSize>, AdTypes.BANNER, section)
-        log { "attaching banner ad from unified" }
-        this.currentAdSizes = adSizes
-        this.currentAdUnit = adUnitId
-        adView.layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
-        this.adView = adView
-        attachView()
-        return adListener
     }
 
     fun setSection(section: String) {
         this.section = section
         if (this::currentAdSizes.isInitialized && this::currentAdUnit.isInitialized) {
-            attachAdView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
+            attachAdMobView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
         }
     }
 
-    fun setVideoOptions(videoOptions: VideoOptions) {
-        this.videoOptions = videoOptions
-        if (this::currentAdSizes.isInitialized && this::currentAdUnit.isInitialized) {
-            attachAdView(adUnitId = currentAdUnit, adSizes = currentAdSizes, true)
-        }
-    }
 
-    fun setAdListener(listener: BannerAdListener) {
+    fun setAdListener(listener: AdMobBannerListener) {
         this.bannerAdListener = listener
     }
 
@@ -438,10 +463,18 @@ class BannerAdView : LinearLayout, BannerManagerListener {
         var adRequest = request.getAdRequest() ?: return false
         if (!this::currentAdUnit.isInitialized) return false
         fun load() {
-            if (this::adView.isInitialized) {
-                log { "loadAd&load : ${adRequest.customTargeting}" }
-                isRefreshLoaded = adRequest.customTargeting.containsKey("refresh") && adRequest.customTargeting.getString("retry") != "1" && adRequest.customTargeting.getString("new_unit") != "1"
-                bannerManager.fetchDemand(firstLook, adRequest) { adView.loadAd(it) }
+            if (firstLook) {
+                if (this::adMobView.isInitialized) {
+                    log { "loadAd&load : ${adRequest.customTargeting}" }
+                    isRefreshLoaded = adRequest.customTargeting.containsKey("refresh") && adRequest.customTargeting.getString("retry") != "1" && adRequest.customTargeting.getString("new_unit") != "1"
+                    bannerManager.fetchDemand(firstLook, adRequest) { adMobView.loadAd(request.getAdMobRequest() ?: return@fetchDemand) }
+                }
+            } else {
+                if (this::adView.isInitialized) {
+                    log { "loadAd&load : ${adRequest.customTargeting}" }
+                    isRefreshLoaded = adRequest.customTargeting.containsKey("refresh") && adRequest.customTargeting.getString("retry") != "1" && adRequest.customTargeting.getString("new_unit") != "1"
+                    bannerManager.fetchDemand(firstLook, adRequest) { adView.loadAd(it) }
+                }
             }
         }
         if (firstLook) {
@@ -450,7 +483,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
                     if (it) {
                         bannerManager.setConfig(currentAdUnit, currentAdSizes as ArrayList<AdSize>, adType, section)
                         adRequest = bannerManager.checkOverride() ?: adRequest
-                        bannerManager.checkGeoEdge(true) { addGeoEdge(AdSdk.GAM, adView, true) }
+                        bannerManager.checkGeoEdge(true) { addGeoEdge(AdSdk.GAM, if (firstLook) adMobView else adView, true) }
                     }
                     load()
                 }
@@ -458,7 +491,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
                 load()
             }
         } else {
-            bannerManager.checkGeoEdge(false) { addGeoEdge(AdSdk.GAM, adView, false) }
+            bannerManager.checkGeoEdge(false) { addGeoEdge(AdSdk.GAM, if (firstLook) adMobView else adView, false) }
             load()
         }
         return true
@@ -468,6 +501,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
     fun loadWithOW(pubID: String, profile: Int, owAdUnitId: String, configListener: DFPConfigListener? = null): Boolean {
         if (!this::currentAdUnit.isInitialized) return false
         if (this::adView.isInitialized) adView.destroy()
+        if (this::adMobView.isInitialized) adMobView.destroy()
         if (this::pobBanner.isInitialized) pobBanner.destroy()
         fun loadGAM(adRequest: AdManagerAdRequest) {
             if (this::adView.isInitialized) {
@@ -534,6 +568,7 @@ class BannerAdView : LinearLayout, BannerManagerListener {
     fun loadWithOW(pubID: String, profile: Int, owAdUnitId: String, configListener: GAMConfigListener? = null, nativeAdListener: GAMNativeBannerEventHandler.NativeAdListener? = null): Boolean {
         if (!this::currentAdUnit.isInitialized) return false
         if (this::adView.isInitialized) adView.destroy()
+        if (this::adMobView.isInitialized) adMobView.destroy()
         if (this::pobBanner.isInitialized) pobBanner.destroy()
         fun loadGAM(adRequest: AdManagerAdRequest) {
             if (this::adView.isInitialized) {
@@ -680,12 +715,12 @@ class BannerAdView : LinearLayout, BannerManagerListener {
     private val adListener = object : AdListener() {
         override fun onAdClicked() {
             super.onAdClicked()
-            bannerAdListener?.onAdClicked(this@BannerAdView)
+            bannerAdListener?.onAdClicked(this@AdMobBannerAdView)
         }
 
         override fun onAdClosed() {
             super.onAdClosed()
-            bannerAdListener?.onAdClosed(this@BannerAdView)
+            bannerAdListener?.onAdClosed(this@AdMobBannerAdView)
         }
 
         override fun onAdFailedToLoad(p0: LoadAdError) {
@@ -717,24 +752,32 @@ class BannerAdView : LinearLayout, BannerManagerListener {
                     bannerManager.startUnfilledRefreshCounter()
                 }
                 if (bannerManager.allowCallback(isRefreshLoaded) && !retryStatus) {
-                    bannerAdListener?.onAdFailedToLoad(this@BannerAdView, ABMError(p0.code, p0.message, p0.domain), retryStatus)
+                    bannerAdListener?.onAdFailedToLoad(this@AdMobBannerAdView, ABMError(p0.code, p0.message, p0.domain), retryStatus)
                 }
             } else {
                 pendingAttach = false
                 onAdLoaded()
                 onAdImpression()
-                adView.tag = ""
+                if (this@AdMobBannerAdView::adView.isInitialized) {
+                    adView.tag = ""
+                } else {
+                    adMobView.tag = ""
+                }
             }
         }
 
         override fun onAdImpression() {
             super.onAdImpression()
             adEverLoaded = true
-            adView.tag = "loaded"
+            if (this@AdMobBannerAdView::adView.isInitialized) {
+                adView.tag = "loaded"
+            } else {
+                adMobView.tag = "loaded"
+            }
             bannerManager.adImpressed()
             bannerManager.pendingImpression = false
             if (bannerManager.allowCallback(isRefreshLoaded)) {
-                bannerAdListener?.onAdImpression(this@BannerAdView)
+                bannerAdListener?.onAdImpression(this@AdMobBannerAdView)
             }
             if (isRefreshLoaded) {
                 impressOnAdLooks()
@@ -751,23 +794,38 @@ class BannerAdView : LinearLayout, BannerManagerListener {
                 }
             }
             if (bannerManager.allowCallback(isRefreshLoaded)) {
-                bannerAdListener?.onAdLoaded(this@BannerAdView)
+                bannerAdListener?.onAdLoaded(this@AdMobBannerAdView)
             }
-            bannerManager.adLoaded(firstLook, currentAdUnit, adView.responseInfo?.loadedAdapterResponseInfo)
-            if (firstLook) {
-                firstLook = false
-            }
-            AdViewUtils.findPrebidCreativeSize(adView, object : AdViewUtils.PbFindSizeListener {
-                override fun success(width: Int, height: Int) {
-                    adView.setAdSizes(AdSize(width, height))
+            if (this@AdMobBannerAdView::adView.isInitialized) {
+                bannerManager.adLoaded(firstLook, currentAdUnit, adView.responseInfo?.loadedAdapterResponseInfo)
+                if (firstLook) {
+                    firstLook = false
                 }
+                AdViewUtils.findPrebidCreativeSize(adView, object : AdViewUtils.PbFindSizeListener {
+                    override fun success(width: Int, height: Int) {
+                        adView.setAdSizes(AdSize(width, height))
+                    }
 
-                override fun failure(error: PbFindSizeError) {}
-            })
+                    override fun failure(error: PbFindSizeError) {}
+                })
+            } else {
+                bannerManager.adLoaded(firstLook, currentAdUnit, adMobView.responseInfo?.loadedAdapterResponseInfo)
+                if (firstLook) {
+                    firstLook = false
+                }
+                AdViewUtils.findPrebidCreativeSize(adMobView, object : AdViewUtils.PbFindSizeListener {
+                    override fun success(width: Int, height: Int) {
+                        adMobView.setAdSize(AdSize(width, height))
+                    }
+
+                    override fun failure(error: PbFindSizeError) {}
+                })
+            }
+
         }
 
         override fun onAdOpened() {
-            bannerAdListener?.onAdOpened(this@BannerAdView)
+            bannerAdListener?.onAdOpened(this@AdMobBannerAdView)
             super.onAdOpened()
         }
     }
@@ -817,12 +875,22 @@ class BannerAdView : LinearLayout, BannerManagerListener {
             adView.pause()
             bannerManager.adPaused()
         }
+        if (this::adMobView.isInitialized && this::viewState.isInitialized && viewState != Lifecycle.Event.ON_PAUSE) {
+            viewState = Lifecycle.Event.ON_PAUSE
+            adMobView.pause()
+            bannerManager.adPaused()
+        }
     }
 
     fun resumeAd() {
         if (this::adView.isInitialized && this::viewState.isInitialized && viewState != Lifecycle.Event.ON_RESUME) {
             viewState = Lifecycle.Event.ON_RESUME
             adView.resume()
+            bannerManager.adResumed()
+        }
+        if (this::adMobView.isInitialized && this::viewState.isInitialized && viewState != Lifecycle.Event.ON_RESUME) {
+            viewState = Lifecycle.Event.ON_RESUME
+            adMobView.resume()
             bannerManager.adResumed()
         }
     }
@@ -833,10 +901,14 @@ class BannerAdView : LinearLayout, BannerManagerListener {
             adView.destroy()
             bannerManager.adDestroyed()
         }
+        if (this::adMobView.isInitialized && this::viewState.isInitialized && viewState != Lifecycle.Event.ON_DESTROY) {
+            viewState = Lifecycle.Event.ON_DESTROY
+            adMobView.destroy()
+            bannerManager.adDestroyed()
+        }
         if (this::pobBanner.isInitialized) {
             pobBanner.destroy()
         }
     }
-
 
 }

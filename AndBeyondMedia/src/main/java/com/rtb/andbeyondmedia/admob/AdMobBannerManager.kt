@@ -1,4 +1,4 @@
-package com.rtb.andbeyondmedia.banners
+package com.rtb.andbeyondmedia.admob
 
 import android.app.Activity
 import android.content.Context
@@ -27,6 +27,8 @@ import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.admanager.AdManagerAdRequest
 import com.google.gson.Gson
 import com.rtb.andbeyondmedia.BuildConfig
+import com.rtb.andbeyondmedia.banners.BannerAdSize
+import com.rtb.andbeyondmedia.banners.BannerConfig
 import com.rtb.andbeyondmedia.common.AdRequest
 import com.rtb.andbeyondmedia.common.AdTypes
 import com.rtb.andbeyondmedia.common.getAddress
@@ -67,10 +69,12 @@ import java.util.Date
 import java.util.EnumSet
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.collections.contains
+import kotlin.collections.forEach
+import kotlin.collections.isNullOrEmpty
 import kotlin.math.ceil
 
-
-internal class BannerManager(private val context: Context, private val bannerListener: BannerManagerListener, private val view: View? = null) {
+internal class AdMobBannerManager(private val context: Context, private val bannerListener: BannerManagerListener, private val view: View? = null) {
 
     private var activeTimeCounter: CountDownTimer? = null
     private var passiveTimeCounter: CountDownTimer? = null
