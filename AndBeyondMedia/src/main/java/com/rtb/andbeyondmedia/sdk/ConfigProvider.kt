@@ -96,9 +96,6 @@ internal object ConfigProvider {
         }
         try {
             withContext(Dispatchers.Main) {
-                if (config?.refetch != null) {
-                    reFetchConfig(context, config.refetch)
-                }
                 val countryFetchStatus = config?.countryStatus
                 if (countryFetchStatus?.active == 1 && !countryFetchStatus.url.isNullOrEmpty()) {
                     fetchDetectedCountry(context, countryFetchStatus.url)
@@ -109,19 +106,6 @@ internal object ConfigProvider {
             SDKManager.initialize(context, null)
         }
         configStatus.value = ConfigFetch.Completed(config)
-    }
-
-    internal suspend fun reFetchConfig(context: Context, delay: Long? = null) = withContext(Dispatchers.IO) {
-        if (delay == null || delay < 900) return@withContext
-        try {
-            val constraints = Constraints.Builder().build()
-            val workerRequest: OneTimeWorkRequest = OneTimeWorkRequestBuilder<ConfigFetchWorker>()
-                    .setConstraints(constraints).setInitialDelay(delay, TimeUnit.SECONDS).build()
-            val workManager = getWorkManager(context)
-            workManager.enqueueUniqueWork(ConfigFetchWorker::class.java.simpleName, ExistingWorkPolicy.REPLACE, workerRequest)
-        } catch (_: Throwable) {
-            SDKManager.initialize(context, null)
-        }
     }
 
     internal fun fetchDetectedCountry(context: Context, baseUrl: String) {
@@ -238,46 +222,6 @@ internal class FileReadWorker(private val context: Context, params: WorkerParame
                 null
             }
         }
-    }
-}
-
-internal class ConfigFetchWorker(private val context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
-        var config: SDKConfig? = null
-        val result = try {
-            log("Delayed Fetching config for ${context.packageName}")
-            val configService = ConfigProvider.getConfigService()
-            val response = configService.getConfig(context.packageName).execute()
-            if (response.isSuccessful && response.body() != null) {
-                config = response.body()
-                ConfigProvider.setConfig(config)
-                ConfigProvider.storeConfig(context, config)
-                log("Delayed Config fetched successfully.")
-                Result.success()
-            } else {
-                log("Delayed Failed softly to fetch config.")
-                config = ConfigProvider.readConfig(context)
-                ConfigProvider.setConfig(config)
-                Result.success()
-            }
-        } catch (e: Throwable) {
-            log("Delayed Failed hard to fetch config")
-            Logger.ERROR.log(msg = e.message ?: "")
-            config = ConfigProvider.readConfig(context)
-            ConfigProvider.setConfig(config)
-            Result.success()
-        }
-        withContext(Dispatchers.Main) {
-            if (config?.refetch != null) {
-                ConfigProvider.reFetchConfig(context, config.refetch)
-            }
-            val countryFetchStatus = config?.countryStatus
-            if (countryFetchStatus?.active == 1 && !countryFetchStatus.url.isNullOrEmpty()) {
-                ConfigProvider.fetchDetectedCountry(context, countryFetchStatus.url)
-            }
-            AndBeyondMedia.configFetched(context, config)
-        }
-        return result
     }
 }
 
